@@ -14,6 +14,7 @@ Este documento sirve como un registro vivo de la arquitectura, estado y bugs de 
    - Botón dinámico que centra y hace zoom (`17.0`) a la ubicación.
 3. **API de Calles (Routing):** Las rutas de prueba (líneas rectas) se transforman automáticamente al trazado de las calles reales consumiendo la API de **OSRM (Open Source Routing Machine)**.
    - **Caché Integrado:** Uso de `cached_network_image` para guardar mapas en disco y ahorrar datos móviles.
+4. **Selector de Capas:** Toggle integrado para alternar entre mapa estándar (OSM) y Vista Satelital (Esri World Imagery).
 4. **UI Moderna (Material 3 / Bottom Sheet):**
    - Menú de circuitos deslizable usando `CustomScrollView` y `Slivers` (Para mantener el buscador "Sticky" anclado arriba al hacer scroll).
 5. **Búsqueda Integrada:**
@@ -38,5 +39,5 @@ Si la app vuelve a presentar estos problemas, aquí está la solución históric
 
 ## 🎯 Próximos Pasos Sugeridos (To-Do)
 - [x] **Algoritmo de Sugerencia:** Dibujar una "Línea de Ruta" que una el GPS del usuario (`_currentLocation`) con el destino buscado (`_destinationPlace`).
-- [ ] **Selector de Capas:** Agregar un botón flotante extra para alternar entre Modo Claro, Modo Oscuro y Vista Satelital del Mapa.
-- [ ] **Clustering:** Agrupar los iconitos de paradas para no saturar el mapa visualmente al alejar la vista.
+- [x] **Selector de Capas:** Agregar un botón flotante extra para alternar entre Mapa Base y Vista Satelital.
+- [x] **Clustering:** Agrupar los iconitos de paradas para no saturar el mapa visualmente al alejar la vista.

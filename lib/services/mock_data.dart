@@ -5,51 +5,69 @@ import '../models/route_model.dart';
 // Aquí simulamos lo que más adelante te devolvería una Base de Datos o una API
 final List<RouteModel> mockRoutes = [
   RouteModel(
-    id: '1',
-    name: 'Ruta Mendez / Centro (UTPCAM)',
-    companyColor: Colors.green, // Combi Verde
+    id: 'demo_ruta_1',
+    name: 'Ruta 1: Américas - Altabrisa (Vía Catedral)',
+    companyColor: Colors.green,
     coordinates: [
-      const LatLng(17.9895, -92.9475),
-      const LatLng(17.9920, -92.9460),
-      const LatLng(17.9950, -92.9440),
-      const LatLng(17.9975, -92.9420),
+      const LatLng(18.014410, -92.918830), // Américas
+      const LatLng(17.994200, -92.935600), // UJAT
+      const LatLng(17.987800, -92.942100), // Catedral
+      const LatLng(17.986800, -92.938800), // ADO
+      const LatLng(17.966179, -92.940801), // Altabrisa
     ],
     stops: [
-      StopModel(name: 'Parque Juárez', location: const LatLng(17.9895, -92.9475)),
-      StopModel(name: 'Mendez y Pagés', location: const LatLng(17.9950, -92.9440)),
+      StopModel(name: 'Plaza Las Américas', location: const LatLng(18.014410, -92.918830)),
+      StopModel(name: 'UJAT Zona de la Cultura', location: const LatLng(17.994200, -92.935600)),
+      StopModel(name: 'Catedral del Señor de Tabasco', location: const LatLng(17.987800, -92.942100)),
+      StopModel(name: 'Terminal ADO', location: const LatLng(17.986800, -92.938800)),
+      StopModel(name: 'Plaza Altabrisa', location: const LatLng(17.966179, -92.940801)),
     ],
   ),
   RouteModel(
-    id: '2',
-    name: 'Ruta 27 de Febrero (Vicosertra)',
-    companyColor: Colors.brown, // Combi Café/Amarilla
+    id: 'demo_ruta_2',
+    name: 'Ruta 2: P. Tabasco - Mercado (Vía Catedral)',
+    companyColor: Colors.blue,
     coordinates: [
-      const LatLng(17.9895, -92.9475),
-      const LatLng(17.9870, -92.9490),
-      const LatLng(17.9840, -92.9510),
-      const LatLng(17.9810, -92.9530),
-      const LatLng(17.9780, -92.9550),
+      const LatLng(18.015200, -92.969600), // Parque Tabasco
+      const LatLng(17.996464, -92.954734), // Europlaza
+      const LatLng(17.987800, -92.942100), // Catedral (¡Punto de Transbordo con Ruta 1!)
+      const LatLng(17.996405, -92.914366), // Mercado Pino Suárez
     ],
     stops: [
-      StopModel(name: 'Catedral', location: const LatLng(17.9870, -92.9490)),
-      StopModel(name: 'Reloj de Tres Caras', location: const LatLng(17.9810, -92.9530)),
+      StopModel(name: 'Parque Tabasco', location: const LatLng(18.015200, -92.969600)),
+      StopModel(name: 'Europlaza', location: const LatLng(17.996464, -92.954734)),
+      StopModel(name: 'Catedral del Señor de Tabasco', location: const LatLng(17.987800, -92.942100)),
+      StopModel(name: 'Mercado Pino Suárez', location: const LatLng(17.996405, -92.914366)),
     ],
   ),
   RouteModel(
-    id: '3',
-    name: 'Corredor Las Mercedes - Reclusorio',
-    companyColor: Colors.green, // UTPCAM
+    id: 'demo_ruta_3',
+    name: 'Ruta 3: Rovirosa - Deportiva (Vía ADO)',
+    companyColor: Colors.red,
     coordinates: [
-      const LatLng(17.9250, -92.9280), // Las Mercedes
-      const LatLng(17.9500, -92.9300), // Periférico Sur
-      const LatLng(17.9715, -92.9315), // Guayabal
-      const LatLng(17.9800, -92.9150), // Universidad
-      const LatLng(17.9850, -92.8970), // Reclusorio
+      const LatLng(17.982500, -92.957500), // Rovirosa
+      const LatLng(17.986800, -92.938800), // ADO (¡Punto de Transbordo con Ruta 1!)
+      const LatLng(17.981500, -92.935500), // Deportiva
     ],
     stops: [
-      StopModel(name: 'Fracc. Las Mercedes', location: const LatLng(17.9250, -92.9280)),
-      StopModel(name: 'Distribuidor Guayabal', location: const LatLng(17.9715, -92.9315)),
-      StopModel(name: 'Reclusorio (CREST)', location: const LatLng(17.9850, -92.8970)),
+      StopModel(name: 'Hospital Rovirosa', location: const LatLng(17.982500, -92.957500)),
+      StopModel(name: 'Terminal ADO', location: const LatLng(17.986800, -92.938800)),
+      StopModel(name: 'Ciudad Deportiva', location: const LatLng(17.981500, -92.935500)),
+    ],
+  ),
+  RouteModel(
+    id: 'demo_ruta_4',
+    name: 'Ruta 4: Europlaza - Altabrisa (Periférico)',
+    companyColor: const Color(0xFF800020),
+    coordinates: [
+      const LatLng(17.996464, -92.954734), // Europlaza
+      const LatLng(17.982500, -92.957500), // Rovirosa (¡Punto de Transbordo con Ruta 3!)
+      const LatLng(17.966179, -92.940801), // Altabrisa
+    ],
+    stops: [
+      StopModel(name: 'Europlaza', location: const LatLng(17.996464, -92.954734)),
+      StopModel(name: 'Hospital Rovirosa', location: const LatLng(17.982500, -92.957500)),
+      StopModel(name: 'Plaza Altabrisa', location: const LatLng(17.966179, -92.940801)),
     ],
   ),
 ];

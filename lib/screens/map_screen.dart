@@ -7,6 +7,8 @@ import '../services/mock_data.dart';
 import '../services/routing_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'search_screen.dart'; // Importamos la nueva pantalla
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import '../services/transit_algorithm.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -40,6 +42,10 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   // Ruta dibujada desde el usuario hasta el destino
   List<LatLng> _routeToDestination = [];
 
+  // Sugerencia de transporte y caminos a pie
+  TransitSuggestion? _transitSuggestion;
+  List<List<LatLng>> _walkingPaths = [];
+
   // Controlador del panel deslizable para poder abrirlo/cerrarlo mediante código
   final DraggableScrollableController _sheetController = DraggableScrollableController();
 
@@ -48,6 +54,9 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
 
   // Controlador para el pulso continuo de la ubicación del usuario
   late AnimationController _pulseController;
+
+  // Estado de la vista del mapa (Normal o Satelital)
+  bool _isSatelliteView = false;
 
   @override
   void initState() {
@@ -77,6 +86,37 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         });
       }
     }
+  }
+
+  // Función para encuadrar la cámara y mostrar toda la ruta completa sin que nada la tape
+  void _fitRouteBounds() {
+    List<LatLng> allPoints = [];
+
+    if (_currentLocation != null) allPoints.add(_currentLocation!);
+    if (_destinationPlace != null) allPoints.add(_destinationPlace!.location);
+    if (_routeToDestination.isNotEmpty) allPoints.addAll(_routeToDestination);
+
+    if (_transitSuggestion != null) {
+      for (var path in _walkingPaths) {
+        allPoints.addAll(path);
+      }
+      for (var leg in _transitSuggestion!.legs) {
+        if (_detailedRoutes.containsKey(leg.route.id)) {
+          allPoints.addAll(_detailedRoutes[leg.route.id]!);
+        } else {
+          allPoints.addAll(leg.route.coordinates);
+        }
+      }
+    }
+
+    if (allPoints.isEmpty) return;
+
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(allPoints),
+        padding: const EdgeInsets.only(top: 120, bottom: 280, left: 40, right: 40), // El padding inferior evita que el menú tape la ruta
+      ),
+    );
   }
 
   @override
@@ -168,7 +208,9 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: _isSatelliteView
+                    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                    : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.app_de_rutas_de_transporte_en_villahermosa',
                 tileProvider: CachedTileProvider(), // Conectamos nuestro sistema de caché aquí
               ),
@@ -193,53 +235,93 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                       color: Colors.blue.shade800, // Azul fuerte para destacarla de las combis
                       strokeWidth: 5.0,
                     ),
+                  // Líneas punteadas de caminata (Estilo Red Dead Redemption)
+                  if (_transitSuggestion != null && _walkingPaths.isNotEmpty)
+                    ..._walkingPaths.map((path) => Polyline(
+                      points: path,
+                      color: Colors.black87,
+                      strokeWidth: 4.5,
+                      isDotted: true, // ¡El punteado mágico!
+                    )),
                 ],
               ),
-              MarkerLayer(
-                markers: [
-                  // 1. DIBUJAMOS LAS PARADAS DE LAS RUTAS ACTIVAS
-                  ...mockRoutes
-                      .where((route) => _activeRouteIds.contains(route.id))
-                      .expand((route) {
-                    return route.stops.map((stop) {
-                      return Marker(
-                        point: stop.location,
-                        width: 40, // Área táctil ampliada
-                        height: 40,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedStop = stop;
-                            });
-                            // Opcional: Centra el mapa en la parada al tocarla
-                            _mapController.move(stop.location, 15.5);
-                          },
-                          child: Center(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: _selectedStop == stop ? 24 : 16, // Crece si está seleccionada
-                              height: _selectedStop == stop ? 24 : 16,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: route.companyColor, width: _selectedStop == stop ? 6 : 4),
-                                boxShadow: [
-                                  BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4),
-                                ],
+              
+              // CAPA DE CLUSTERING (Exclusiva para las paradas de transporte)
+              MarkerClusterLayerWidget(
+                options: MarkerClusterLayerOptions(
+                  maxClusterRadius: 45,
+                  size: const Size(40, 40),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(50),
+                  maxZoom: 15, // A partir del zoom 15, se separan por completo
+                  markers: mockRoutes
+                        .where((route) => _activeRouteIds.contains(route.id))
+                        .expand((route) {
+                      return route.stops.map((stop) {
+                        return Marker(
+                          point: stop.location,
+                          width: 40,
+                          height: 40,
+                          rotate: true,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedStop = stop;
+                              });
+                              _mapController.move(stop.location, 15.5);
+                            },
+                            child: Center(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: _selectedStop == stop ? 24 : 16,
+                                height: _selectedStop == stop ? 24 : 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: route.companyColor, width: _selectedStop == stop ? 6 : 4),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
+                        );
+                      });
+                    }).toList(),
+                  builder: (context, markers) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade800,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          markers.length.toString(),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
-                      );
-                    });
-                  }),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              
+              // CAPA NORMAL (Para tu GPS y el Destino, así no se agrupan con las paradas)
+              MarkerLayer(
+                markers: [
                   
-                  // 1.5 DIBUJAMOS EL DESTINO BUSCADO (Un pin rojo grande)
+                  // DIBUJAMOS EL DESTINO BUSCADO (Un pin rojo grande)
                   if (_destinationPlace != null)
                     Marker(
                       point: _destinationPlace!.location,
                       width: 50,
                       height: 50,
+                      alignment: Alignment.topCenter, // Empuja el pin hacia arriba para que la punta exacta toque la calle
+                      rotate: true, // Mantiene el pin siempre de pie
                       child: GestureDetector(
                         onTap: () {
                           setState(() {
@@ -256,6 +338,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                       point: _currentLocation!,
                   width: 80, // Aumentamos el tamaño total para el halo animado
                   height: 80,
+                      rotate: true, // Evita que la personita (Icons.person) se ponga de cabeza al rotar el mapa
                       child: AnimatedBuilder(
                         animation: _pulseController,
                         builder: (context, child) {
@@ -362,13 +445,33 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                     bottom: (screenHeight * extent) + 16, // Calcula dónde termina el panel
                     child: Transform.scale(
                       scale: value,
-                      child: FloatingActionButton(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.blue.shade700,
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Cuadrado redondeado
-                        onPressed: _obtenerUbicacionYCentrar,
-                        child: const Icon(Icons.my_location),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FloatingActionButton(
+                            heroTag: 'btnSatellite', // Evita errores al tener múltiples FABs
+                            backgroundColor: Colors.white,
+                            foregroundColor: _isSatelliteView ? Colors.green.shade700 : Colors.grey.shade700,
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            onPressed: () {
+                              setState(() {
+                                _isSatelliteView = !_isSatelliteView;
+                              });
+                            },
+                            child: Icon(_isSatelliteView ? Icons.map_rounded : Icons.satellite_alt_rounded),
+                          ),
+                          const SizedBox(height: 12),
+                          FloatingActionButton(
+                            heroTag: 'btnLocation',
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.blue.shade700,
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            onPressed: _obtenerUbicacionYCentrar,
+                            child: const Icon(Icons.my_location),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -385,6 +488,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               return true;
             },
             child: DraggableScrollableSheet(
+              controller: _sheetController, // ¡Faltaba conectar el controlador aquí!
               initialChildSize: 0.24, // Altura perfecta para mostrar buscador y botones
               minChildSize: 0.15, // Lo mínimo que se puede cerrar
               maxChildSize: 0.85, // Se abre más para ver las listas sugeridas
@@ -437,6 +541,8 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                                     _destinationPlace = selectedPlace;
                                     _selectedStop = selectedPlace; // Automáticamente abrimos su etiqueta flotante
                                     _routeToDestination.clear(); // Limpiar ruta por si había una antes
+                                    _transitSuggestion = null;
+                                    _walkingPaths.clear();
                                   });
                                   
                                   // Esperamos 350ms para que el teclado termine de ocultarse 
@@ -447,16 +553,58 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                                         // Colapsamos el panel para que pueda ver el mapa
                                         _sheetController.animateTo(0.24, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
                                       }
-                                      // ¡Hacemos un viaje automático con la cámara hacia el destino!
-                                      _mapController.move(selectedPlace.location, 16.5);
                                       
-                                      // Y calculamos la ruta real usando nuestra API de OSRM
+                                      // Hacemos un encuadre inicial entre origen y destino antes de calcular la ruta real
                                       if (_currentLocation != null) {
-                                        final routePoints = await RoutingService.getRoutePolyline([_currentLocation!, selectedPlace.location]);
-                                        if (mounted) {
-                                          setState(() {
-                                            _routeToDestination = routePoints;
-                                          });
+                                        _mapController.fitCamera(
+                                          CameraFit.bounds(
+                                            bounds: LatLngBounds.fromPoints([_currentLocation!, selectedPlace.location]),
+                                            padding: const EdgeInsets.only(top: 120, bottom: 280, left: 40, right: 40),
+                                          ),
+                                        );
+                                      } else {
+                                        _mapController.move(selectedPlace.location, 16.5);
+                                      }
+                                      
+                                      // Buscar sugerencia de viaje en combi (Máximo 800m caminando)
+                                      if (_currentLocation != null) {
+                                        final suggestion = TransitAlgorithm.findBestRoute(_currentLocation!, selectedPlace.location, mockRoutes, maxWalkDistance: 800.0);
+                                        
+                                        if (suggestion != null) {
+                                          List<List<LatLng>> walks = [];
+                                          // Caminata 1: Origen a primer abordaje
+                                          walks.add(await RoutingService.getRoutePolyline([_currentLocation!, suggestion.legs.first.boardingPoint]));
+                                          
+                                          // Caminatas de transbordo (si las hay)
+                                          for (int i = 0; i < suggestion.legs.length - 1; i++) {
+                                            walks.add(await RoutingService.getRoutePolyline([suggestion.legs[i].dropOffPoint, suggestion.legs[i+1].boardingPoint]));
+                                          }
+                                          
+                                          // Caminata Final: Último descenso al destino
+                                          walks.add(await RoutingService.getRoutePolyline([suggestion.legs.last.dropOffPoint, selectedPlace.location]));
+                                          
+                                          if (mounted) {
+                                            setState(() {
+                                              _transitSuggestion = suggestion;
+                                              _walkingPaths = walks;
+                                              _activeRouteIds.clear(); // Apagamos todas las demás combis al instante
+                                              // Encendemos estas rutas en el mapa para que se dibujen
+                                              for (var leg in suggestion.legs) {
+                                                _activeRouteIds.add(leg.route.id);
+                                              }
+                                            });
+                                            _fitRouteBounds(); // Ajustamos la cámara a la ruta exacta
+                                          }
+                                        } else {
+                                          // Si no hay combi directa cerca, trazamos una ruta normal continua en coche
+                                          final routePoints = await RoutingService.getRoutePolyline([_currentLocation!, selectedPlace.location]);
+                                          if (mounted) {
+                                            setState(() {
+                                              _activeRouteIds.clear(); // Si no hay combi, quitamos todas las rutas
+                                              _routeToDestination = routePoints;
+                                            });
+                                            _fitRouteBounds(); // Ajustamos la cámara a la ruta exacta
+                                          }
                                         }
                                       }
                                     }
@@ -497,6 +645,28 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                                             _destinationPlace = null;
                                             _selectedStop = null;
                                             _routeToDestination.clear();
+                                            _transitSuggestion = null;
+                                            _walkingPaths.clear();
+                                            
+                                            // Restauramos todas las rutas al cancelar
+                                            _activeRouteIds.clear();
+                                            _activeRouteIds.addAll(mockRoutes.map((r) => r.id));
+                                            
+                                            // Restauramos todas las rutas al cancelar
+                                            _activeRouteIds.clear();
+                                            _activeRouteIds.addAll(mockRoutes.map((r) => r.id));
+                                            
+                                            // Restauramos todas las rutas al cancelar
+                                            _activeRouteIds.clear();
+                                            _activeRouteIds.addAll(mockRoutes.map((r) => r.id));
+                                            
+                                            // Restauramos todas las rutas al cancelar
+                                            _activeRouteIds.clear();
+                                            _activeRouteIds.addAll(mockRoutes.map((r) => r.id));
+                                            
+                                            // Restauramos todas las rutas al cancelar
+                                            _activeRouteIds.clear();
+                                            _activeRouteIds.addAll(mockRoutes.map((r) => r.id));
                                           });
                                         },
                                       ),
@@ -513,45 +683,93 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // ACCESOS RÁPIDOS (NUEVO DISEÑO)
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              child: Row(
-                                children: [
-                                  _buildQuickActionChip(Icons.home_rounded, 'Casa', Colors.blue),
-                                  const SizedBox(width: 12),
-                                  _buildQuickActionChip(Icons.work_rounded, 'Trabajo', Colors.orange),
-                                  const SizedBox(width: 12),
-                                  _buildQuickActionChip(Icons.star_rounded, 'Favoritos', Colors.amber),
-                                ],
+                            if (_transitSuggestion != null) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                child: Text(
+                                  _transitSuggestion!.legs.length > 1 ? 'Itinerario: Transbordo Necesario' : 'Sugerencia de Viaje Directo',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 12),
-                              child: Text(
-                                'Explorar Circuitos',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                              ..._transitSuggestion!.legs.asMap().entries.map((entry) {
+                                int index = entry.key;
+                                TransitLeg leg = entry.value;
+                                return _buildRouteCard(
+                                  leg.route, 
+                                  _activeRouteIds.contains(leg.route.id), 
+                                  isSuggested: true, 
+                                  walkDistance: index == 0 ? _transitSuggestion!.totalWalkDistance : null, // Solo muestra tiempo de caminata en la primera combi
+                                  stepNumber: index + 1,
+                                );
+                              }).toList(),
+                            ],
+                            
+                            // BOTÓN LLAMATIVO PARA INICIAR EL VIAJE
+                            if (_destinationPlace != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 24, right: 24, top: 12, bottom: 8),
+                                child: SizedBox(
+                                  width: double.infinity, // Ocupa todo el ancho disponible
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      // Al "iniciar", colapsamos el menú y encuadramos toda la ruta
+                                      if (_sheetController.isAttached) {
+                                        _sheetController.animateTo(0.15, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+                                      }
+                                      _fitRouteBounds();
+                                      // Limpiamos el mapa para enfocarnos solo en la ruta sugerida
+                                      setState(() {
+                                        _activeRouteIds.clear();
+                                        if (_transitSuggestion != null) {
+                                          for (var leg in _transitSuggestion!.legs) {
+                                            _activeRouteIds.add(leg.route.id);
+                                          }
+                                        }
+                                      });
+                                    },
+                                    icon: const Icon(Icons.explore_rounded, color: Colors.white, size: 24),
+                                    label: const Text(
+                                      '¡Llévame ahí! 🚀',
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade600,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      elevation: 6,
+                                      shadowColor: Colors.green.withOpacity(0.5),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+
+                            // Ocultamos el título si estamos en medio de un viaje
+                            if (_destinationPlace == null)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 12),
+                                child: Text(
+                                  'Explorar Circuitos',
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                                ),
+                              ),
                           ],
                         ),
                       ),
-                      // LISTA DE RUTAS MAPEADA A SLIVERS
-                      SliverPadding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final route = mockRoutes[index];
-                              final isActive = _activeRouteIds.contains(route.id);
-                              return _buildRouteCard(route, isActive);
-                            },
-                            childCount: mockRoutes.length,
+                      // LISTA DE RUTAS MAPEADA A SLIVERS (Se oculta completamente durante el viaje)
+                      if (_destinationPlace == null)
+                        SliverPadding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final route = mockRoutes[index];
+                                final isActive = _activeRouteIds.contains(route.id);
+                                return _buildRouteCard(route, isActive);
+                              },
+                              childCount: mockRoutes.length,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 );
@@ -565,113 +783,88 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
 
   // Widget extraído para mantener limpio el código principal.
   // Este widget tiene animaciones implícitas muy elegantes.
-  Widget _buildRouteCard(RouteModel route, bool isActive, {bool isSuggested = false}) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isActive) {
-            _activeRouteIds.remove(route.id);
-            // Si apagamos la ruta y su parada estaba seleccionada, ocultamos la etiqueta
-            if (_selectedStop != null && route.stops.contains(_selectedStop)) {
-              _selectedStop = null;
+  Widget _buildRouteCard(RouteModel route, bool isActive, {bool isSuggested = false, double? walkDistance, int? stepNumber}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: SwitchListTile(
+        value: isActive,
+        onChanged: (bool value) {
+          setState(() {
+            if (value) {
+              _activeRouteIds.add(route.id);
+            } else {
+              _activeRouteIds.remove(route.id);
+              // Ocultar etiqueta si apagamos la ruta seleccionada
+              if (_selectedStop != null && route.stops.contains(_selectedStop)) {
+                _selectedStop = null;
+              }
             }
-          } else {
-            _activeRouteIds.add(route.id);
-          }
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          // Si está activa, le ponemos un fondo muy transparente del color de su empresa
-          color: isActive ? route.companyColor.withOpacity(0.08) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive ? route.companyColor.withOpacity(0.5) : Colors.grey.shade200,
-            width: isActive ? 2 : 1,
-          ),
-          boxShadow: [
-            if (!isActive)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-          ],
-        ),
-        child: Row(
+          });
+        },
+        activeTrackColor: route.companyColor,
+        activeColor: Colors.white,
+        inactiveTrackColor: Colors.grey.shade200,
+        inactiveThumbColor: Colors.grey.shade400,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
           children: [
-            // Ícono de la empresa
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: route.companyColor.withOpacity(0.15),
-                shape: BoxShape.circle,
+            if (stepNumber != null) ...[
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
+                child: Text('$stepNumber', style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
               ),
-              child: Center(
-                child: Icon(Icons.directions_bus_rounded, color: route.companyColor),
-              ),
-            ),
-            const SizedBox(width: 16),
-            // Texto con la ruta
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
                 route.name,
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
+                  fontSize: 15,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
                   color: Colors.black87,
                 ),
               ),
             ),
-            // Check animado que aparece/desaparece
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutBack,
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: isActive ? route.companyColor : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isActive ? route.companyColor : Colors.grey.shade300,
-                  width: 2,
+            if (isSuggested) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  // Calculamos los minutos asumiendo que caminamos 80 metros por minuto
+                  walkDistance != null ? 'A ${(walkDistance / 80).ceil()} min 🚶' : 'Recomendada',
+                  style: TextStyle(color: Colors.green.shade700, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
-              child: AnimatedScale(
-                scale: isActive ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 250),
-                child: const Icon(Icons.check, color: Colors.white, size: 16),
-              ),
-            ),
+            ],
           ],
         ),
-      ),
-    );
-  }
-
-  // Nuevo Widget para los "Chips" de acciones rápidas
-  Widget _buildQuickActionChip(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(color: color.withOpacity(0.9), fontWeight: FontWeight.bold, fontSize: 14),
+        secondary: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: isActive ? route.companyColor.withOpacity(0.15) : Colors.grey.shade100,
+            shape: BoxShape.circle,
           ),
-        ],
+          child: Icon(
+            Icons.directions_bus_rounded,
+            color: isActive ? route.companyColor : Colors.grey.shade500,
+            size: 20,
+          ),
+        ),
       ),
     );
   }

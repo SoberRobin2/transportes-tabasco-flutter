@@ -18,21 +18,32 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isLoading = false;
   Timer? _debounce;
 
-  // Sugerencias iniciales antes de buscar
-  final List<StopModel> _suggestedPlaces = [
-    // Los que confirmaste como BIEN
+  // Lista de base de datos local con todas las coordenadas.
+  final List<StopModel> _localPlaces = [
     StopModel(name: 'Plaza Altabrisa', location: const LatLng(17.96617955, -92.94080136)),
+    StopModel(name: 'Parque Tabasco Dora María', location: const LatLng(18.015200, -92.969600)), // Corregida (la anterior apuntaba a otro lado)
+    StopModel(name: 'Galerías Tabasco 2000', location: const LatLng(17.996700, -92.946500)), // Corregida
+    StopModel(name: 'Parque Tomás Garrido Canabal', location: const LatLng(17.99866610, -92.93607057)),
+    StopModel(name: 'Catedral del Señor de Tabasco', location: const LatLng(17.987800, -92.942100)), // Corregida
     StopModel(name: 'Plaza Las Américas', location: const LatLng(18.01441000, -92.91883000)),
     StopModel(name: 'Mercado Pino Suárez', location: const LatLng(17.99640556, -92.91436667)),
-    // Los que estaban MAL, corregidos con la máxima precisión
-    StopModel(name: 'Parque Tabasco Dora María', location: const LatLng(18.0152, -92.9696)),
-    StopModel(name: 'Galerías Tabasco 2000', location: const LatLng(17.9967, -92.9465)),
-    StopModel(name: 'Catedral del Señor de Tabasco', location: const LatLng(17.9878, -92.9421)),
-    StopModel(name: 'Europlaza', location: const LatLng(17.9937, -92.9556)),
-    StopModel(name: 'Parque Museo La Venta', location: const LatLng(18.0007, -92.9401)),
-    StopModel(name: 'Ciudad Deportiva', location: const LatLng(17.9815, -92.9355)),
-    StopModel(name: 'UJAT Zona de la Cultura', location: const LatLng(17.9942, -92.9356)),
+    StopModel(name: 'Ciudad Deportiva', location: const LatLng(17.981500, -92.935500)), // Corregida
+    StopModel(name: 'UJAT Zona de la Cultura', location: const LatLng(17.994200, -92.935600)), // Corregida
+    StopModel(name: 'ITVH', location: const LatLng(17.96430000, -92.94320000)),
+    StopModel(name: 'UAG', location: const LatLng(17.99300000, -92.92600000)),
+    StopModel(name: 'Hospital Rovirosa', location: const LatLng(17.98250000, -92.95750000)),
+    StopModel(name: 'Hospital Juan Graham', location: const LatLng(17.95690000, -92.95240000)),
+    StopModel(name: 'Hospital Ángeles', location: const LatLng(17.99390000, -92.96380000)),
+    StopModel(name: 'Terminal ADO', location: const LatLng(17.98680000, -92.93880000)),
+    StopModel(name: 'Central Camionera', location: const LatLng(17.97090000, -92.94940000)),
+    StopModel(name: 'Zona arqueológica de Comalcalco', location: const LatLng(18.26690000, -93.22090000)),
+    StopModel(name: 'Tapijulapa', location: const LatLng(17.45880000, -92.76270000)),
+    StopModel(name: 'Palacio de Gobierno', location: const LatLng(17.98630000, -92.93150000)),
+    StopModel(name: 'Fiscalía General del Estado', location: const LatLng(17.98690000, -92.93490000)),
   ];
+  
+  // Obtenemos las primeras 8 para sugerencias rápidas
+  List<StopModel> get _suggestedPlaces => _localPlaces.take(8).toList();
 
   @override
   void dispose() {
@@ -53,18 +64,24 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
+    // 1. Filtrar los lugares locales INMEDIATAMENTE
+    final localMatches = _localPlaces
+        .where((place) => place.name.toLowerCase().contains(query.trim().toLowerCase()))
+        .toList();
+
+    setState(() {
+      _searchResults = localMatches;
+      _isLoading = true; // Mostramos cargando porque también buscaremos en internet
+    });
+
     // Esperamos 800ms después de que el usuario deje de escribir para llamar a la API
     _debounce = Timer(const Duration(milliseconds: 800), () {
-      _searchPlaces(query.trim());
+      _searchPlaces(query.trim(), localMatches);
     });
   }
 
-  Future<void> _searchPlaces(String query) async {
-    setState(() => _isLoading = true);
-
+  Future<void> _searchPlaces(String query, List<StopModel> localMatches) async {
     try {
-      // Consultamos la API pública y gratuita de OpenStreetMap (Nominatim)
-      // Añadimos "Tabasco, Mexico" al query para que no busque cosas en otros países
       final Uri url = Uri.parse('https://nominatim.openstreetmap.org/search?q=$query, Tabasco, Mexico&format=json&limit=15');
       
       final response = await http.get(url, headers: {
@@ -77,8 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
         
         if (mounted) {
           setState(() {
-            _searchResults = data.map((item) {
-              // A veces 'name' viene vacío, extraemos el nombre principal
+            final apiResults = data.map((item) {
               String placeName = item['name'] ?? '';
               if (placeName.isEmpty) {
                 placeName = item['display_name'].split(',')[0];
@@ -88,6 +104,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 location: LatLng(double.parse(item['lat']), double.parse(item['lon'])),
               );
             }).toList();
+            
+            // Combinamos los resultados locales con los de la API, evitando repetidos
+            final localNames = localMatches.map((e) => e.name.toLowerCase()).toSet();
+            final uniqueApiResults = apiResults.where((api) => !localNames.contains(api.name.toLowerCase())).toList();
+            
+            _searchResults = [...localMatches, ...uniqueApiResults];
           });
         }
       }
