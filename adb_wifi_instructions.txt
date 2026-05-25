@@ -1,0 +1,38 @@
+======================================================
+   GUÍA PARA CONECTAR DISPOSITIVO POR WIFI (ADB)
+======================================================
+
+MÉTODO 1: ANDROID 11 O SUPERIOR (Completamente Inalámbrico)
+------------------------------------------------------
+1. Asegúrate de que tu PC y tu teléfono estén en la misma red WiFi.
+2. Ve a los "Ajustes" de tu teléfono > "Opciones para desarrolladores".
+3. Activa "Depuración inalámbrica" (Wireless debugging).
+4. Toca sobre el texto de la opción "Depuración inalámbrica" y selecciona "Vincular dispositivo con código de vinculación".
+5. Anota la IP, el Puerto y el Código de vinculación que aparecen en tu pantalla.
+6. Abre tu terminal en la computadora y ejecuta:
+   adb pair [DIRECCIÓN_IP]:[PUERTO_DE_VINCULACIÓN]
+   (Ejemplo: adb pair 192.168.1.72:41235)
+7. Introduce el código que apareció en el teléfono cuando la terminal te lo pida.
+8. Una vez vinculado con éxito, verifica la IP y el PUERTO PRINCIPAL de conexión (aparece en la pantalla de depuración inalámbrica de tu teléfono, el puerto suele ser diferente al de vinculación) y ejecuta:
+   adb connect [DIRECCIÓN_IP]:[PUERTO_DE_CONEXIÓN]
+   (Ejemplo: adb connect 192.168.1.72:38123)
+
+MÉTODO 2: ANDROID 10 O INFERIOR (Requiere cable USB inicial)
+------------------------------------------------------
+1. Asegúrate de que tu PC y tu teléfono estén en la misma red WiFi.
+2. Conecta tu teléfono a la computadora mediante el cable USB.
+3. Abre la terminal y verifica que tu dispositivo esté conectado correctamente:
+   adb devices
+4. Configura el dispositivo para que escuche conexiones de red en el puerto 5555:
+   adb tcpip 5555
+5. Ya puedes desconectar el cable USB de forma segura.
+6. Ve a los Ajustes de WiFi en tu teléfono para averiguar tu Dirección IP.
+7. Conéctate a tu teléfono ejecutando en la terminal:
+   adb connect [DIRECCIÓN_IP]:5555
+   (Ejemplo: adb connect 192.168.1.72:5555)
+
+COMANDOS ÚTILES
+------------------------------------------------------
+- Ver lista de dispositivos conectados:    adb devices
+- Desconectar una IP específica:           adb disconnect [DIRECCIÓN_IP]:[PUERTO]
+- Desconectar todos los dispositivos:      adb disconnect

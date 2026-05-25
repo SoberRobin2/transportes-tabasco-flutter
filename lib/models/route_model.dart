@@ -14,6 +14,10 @@ class RouteModel {
   final Color companyColor;
   final List<LatLng> coordinates; // Los puntos que forman el circuito
   final List<StopModel> stops;    // Las paradas a lo largo de la ruta
+  final String schedule;          // Horario de servicio
+  final String frequency;         // Frecuencia de paso
+  final String fare;              // Tarifa
+  final String duration;          // Duración estimada
 
   RouteModel({
     required this.id,
@@ -21,5 +25,9 @@ class RouteModel {
     required this.companyColor,
     required this.coordinates,
     this.stops = const [], // Si no le pasamos paradas, por defecto estará vacío
+    this.schedule = '5:30 am — 10:00 pm',
+    this.frequency = 'Cada 10 minutos aprox.',
+    this.fare = '\$9.50 MXN por viaje',
+    this.duration = '~40 min',
   });
 }

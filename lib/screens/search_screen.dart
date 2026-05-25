@@ -40,6 +40,8 @@ class _SearchScreenState extends State<SearchScreen> {
     StopModel(name: 'Tapijulapa', location: const LatLng(17.45880000, -92.76270000)),
     StopModel(name: 'Palacio de Gobierno', location: const LatLng(17.98630000, -92.93150000)),
     StopModel(name: 'Fiscalía General del Estado', location: const LatLng(17.98690000, -92.93490000)),
+    StopModel(name: 'Central Camionera Cunduacán', location: const LatLng(18.066200, -93.174600)),
+    StopModel(name: 'Central Cardesa (Villahermosa)', location: const LatLng(17.996200, -92.914000)),
   ];
   
   // Obtenemos las primeras 8 para sugerencias rápidas
@@ -165,12 +167,12 @@ class _SearchScreenState extends State<SearchScreen> {
                           leading: const Icon(Icons.place, color: Colors.blue),
                           title: Text(place.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                           subtitle: const Text('Tabasco, México', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          onTap: () {
+                          onTap: () async {
                             // Ocultamos el teclado ANTES de regresar
                             FocusScope.of(context).unfocus();
-                            Future.delayed(const Duration(milliseconds: 250), () {
-                              if (mounted) Navigator.pop(context, place);
-                            });
+                            await Future.delayed(const Duration(milliseconds: 250));
+                            if (!context.mounted) return;
+                            Navigator.pop(context, place);
                           },
                         );
                       },
@@ -200,11 +202,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 leading: Icon(Icons.star_rounded, color: Colors.amber.shade400),
                 title: Text(place.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                 subtitle: const Text('Villahermosa, Tabasco', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                onTap: () {
+                onTap: () async {
                   FocusScope.of(context).unfocus();
-                  Future.delayed(const Duration(milliseconds: 250), () {
-                    if (mounted) Navigator.pop(context, place);
-                  });
+                  await Future.delayed(const Duration(milliseconds: 250));
+                  if (!context.mounted) return;
+                  Navigator.pop(context, place);
                 },
               );
             },
