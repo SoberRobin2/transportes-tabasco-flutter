@@ -200,42 +200,127 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: FutureBuilder<List<LatLng>>(
-          future: RoutingService.getRoutePolyline(route.coordinates),
+          future: RoutingService.getRoutePolyline(route.coordinates, routeId: route.id),
           builder: (context, snapshot) {
             final points = snapshot.data ?? route.coordinates;
             
-            return FlutterMap(
-              options: MapOptions(
-                initialCameraFit: CameraFit.bounds(
-                  bounds: bounds,
-                  padding: const EdgeInsets.all(24),
-                ),
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.none, // Desactiva gestos para no estorbar el scroll de la pantalla
-                ),
-              ),
+            return Stack(
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.app_de_rutas_de_transporte_en_villahermosa',
-                ),
-                PolylineLayer(
-                  polylines: [
-                    Polyline(points: points, color: route.companyColor, strokeWidth: 5.0),
+                FlutterMap(
+                  options: MapOptions(
+                    initialCameraFit: CameraFit.bounds(
+                      bounds: bounds,
+                      padding: const EdgeInsets.all(24),
+                    ),
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.none, // Desactiva gestos para no estorbar el scroll de la pantalla
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.app_de_rutas_de_transporte_en_villahermosa',
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(points: points, color: route.companyColor, strokeWidth: 5.0),
+                      ],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        if (route.stops.isNotEmpty)
+                          Marker(point: route.stops.first.location, width: 14, height: 14, child: Container(decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
+                        if (route.stops.isNotEmpty)
+                          Marker(point: route.stops.last.location, width: 14, height: 14, child: Container(decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
+                      ],
+                    ),
                   ],
                 ),
-                MarkerLayer(
-                  markers: [
-                    if (route.stops.isNotEmpty)
-                      Marker(point: route.stops.first.location, width: 14, height: 14, child: Container(decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
-                    if (route.stops.isNotEmpty)
-                      Marker(point: route.stops.last.location, width: 14, height: 14, child: Container(decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
-                  ],
+                // Capa de Carga Superpuesta
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  Container(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: route.companyColor),
+                          const SizedBox(height: 8),
+                          Text('Trazando ruta...', style: TextStyle(color: route.companyColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Botón de Ver en pantalla completa
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => _FullScreenMapScreen(route: route)));
+                    },
+                    icon: const Icon(Icons.fullscreen_rounded, size: 20),
+                    label: const Text('Ver en pantalla completa', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF1A1A1A),
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
                 ),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+// NUEVA PANTALLA: Mapa en Pantalla Completa interactivo
+class _FullScreenMapScreen extends StatelessWidget {
+  final RouteModel route;
+  const _FullScreenMapScreen({required this.route});
+
+  @override
+  Widget build(BuildContext context) {
+    final bounds = LatLngBounds.fromPoints(route.coordinates);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(route.name, style: const TextStyle(fontSize: 18)),
+        backgroundColor: route.companyColor,
+      ),
+      body: FutureBuilder<List<LatLng>>(
+        future: RoutingService.getRoutePolyline(route.coordinates, routeId: route.id),
+        builder: (context, snapshot) {
+          final points = snapshot.data ?? route.coordinates;
+          return FlutterMap(
+            options: MapOptions(
+              initialCameraFit: CameraFit.bounds(
+                bounds: bounds,
+                padding: const EdgeInsets.all(32),
+              ),
+              // Al NO incluir 'interactionOptions: InteractiveFlag.none', permitimos todos los gestos (zoom, mover)
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.app_de_rutas_de_transporte_en_villahermosa',
+              ),
+              PolylineLayer(
+                polylines: [Polyline(points: points, color: route.companyColor, strokeWidth: 6.0)],
+              ),
+              MarkerLayer(
+                markers: [
+                  if (route.stops.isNotEmpty) Marker(point: route.stops.first.location, width: 16, height: 16, child: Container(decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
+                  if (route.stops.isNotEmpty) Marker(point: route.stops.last.location, width: 16, height: 16, child: Container(decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

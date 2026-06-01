@@ -88,7 +88,7 @@ class _SearchScreenState extends State<SearchScreen> {
       
       final response = await http.get(url, headers: {
         // OpenStreetMap requiere identificar qué app usa su API
-        'User-Agent': 'TransportesColectivosTabascoApp/1.0',
+        'User-Agent': 'AppDeRutasVillahermosa/1.0',
       });
 
       if (response.statusCode == 200) {

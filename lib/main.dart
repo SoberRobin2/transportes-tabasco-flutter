@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Transportes Colectivos de Tabasco',
+      title: 'App de rutas de transporte en Villahermosa',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         // APLICANDO EL DESIGN SYSTEM SOLICITADO

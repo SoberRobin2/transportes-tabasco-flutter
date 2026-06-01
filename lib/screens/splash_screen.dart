@@ -91,8 +91,35 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Spacer(),
-            // El clásico logo de Flutter centrado
-            const FlutterLogo(size: 140),
+            // Logotipo de la aplicación
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 1200),
+              curve: Curves.easeIn,
+              builder: (context, opacity, child) {
+                return Opacity(
+                  opacity: opacity,
+                  child: child,
+                );
+              },
+              child: Image.asset(
+                'assets/logo.png', // Asegúrate de colocar tu imagen aquí y declararla en pubspec.yaml
+                width: 140,
+                height: 140,
+                errorBuilder: (context, error, stackTrace) {
+                  // Fallback visual temporal si aún no has configurado la imagen en pubspec.yaml
+                  return Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1565C0), // Azul primario de tu Design System
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    child: const Icon(Icons.directions_bus_rounded, size: 80, color: Colors.white),
+                  );
+                },
+              ),
+            ),
             const Spacer(),
             // Indicador de carga minimalista
             Container(
